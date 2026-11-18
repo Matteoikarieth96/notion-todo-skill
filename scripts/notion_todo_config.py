@@ -29,10 +29,13 @@ LIST_KEYS = ("name", "keywords", "data_source", "database_url", "board_view",
 UUID = r"[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}"
 DATA_SOURCE_RE = re.compile(r"collection://" + UUID)
 VIEW_RE = re.compile(r"view://" + UUID)
-CONNECTOR_RE = re.compile(r"[A-Za-z0-9_.-]{1,100}")
-NOTION_HOSTS = ("notion.so", "notion.com", "notion.site")
+CONNECTOR_RE = re.compile(r"mcp__[A-Za-z0-9.-][A-Za-z0-9_.-]{0,90}__")
+NOTION_HOSTS = ("notion.so", "notion.com")
 MAX_BYTES = 256 * 1024
 MAX_NAME = 100
+MAX_LISTS = 10
+MAX_KEYWORDS = 30
+MAX_ERRORS = 50
 UNSAFE_CATEGORIES = ("Cc", "Cf", "Zl", "Zp", "Cs", "Co", "Cn")
 BACKSLASH = chr(92)
 
@@ -86,7 +89,7 @@ def validate(cfg):
     for key in cfg:
         if key not in ("version", "rules", "lists"):
             errors.append("unknown top-level key %r" % key)
-    if cfg.get("version") != 1:
+    if type(cfg.get("version")) is not int or cfg.get("version") != 1:
         errors.append("version must be 1")
 
     rules = cfg.get("rules", {})
@@ -102,6 +105,9 @@ def validate(cfg):
     lists = cfg.get("lists")
     if not isinstance(lists, list) or not lists:
         errors.append("lists must be a non-empty array")
+        return errors
+    if len(lists) > MAX_LISTS:
+        errors.append("at most %d lists" % MAX_LISTS)
         return errors
 
     words, sources = [], {}
@@ -120,23 +126,26 @@ def validate(cfg):
         if not _short_text(name):
             errors.append("%s: name must be a plain string of 1 to %d characters" % (where, MAX_NAME))
         else:
-            words.append((name.strip().lower(), i, where, "name"))
+            words.append((name.strip().casefold(), i, where, "name"))
 
         kws = item.get("keywords")
-        if not isinstance(kws, list) or not kws or not all(_short_text(k) for k in kws):
+        if isinstance(kws, list) and len(kws) > MAX_KEYWORDS:
+            errors.append("%s: at most %d keywords" % (where, MAX_KEYWORDS))
+        elif not isinstance(kws, list) or not kws or not all(_short_text(k) for k in kws):
             errors.append("%s: keywords must be a non-empty array of plain strings (max %d characters)"
                           % (where, MAX_NAME))
         else:
             for kw in kws:
-                words.append((kw.strip().lower(), i, where, "keyword %r" % kw))
+                words.append((kw.strip().casefold(), i, where, "keyword %r" % kw))
 
-        for flag in ("day_note", "shared"):
-            if flag in item and not isinstance(item[flag], bool):
-                errors.append("%s: %s must be true or false" % (where, flag))
+        if "day_note" in item and not isinstance(item["day_note"], bool):
+            errors.append("%s: day_note must be true or false" % where)
+        if not isinstance(item.get("shared"), bool):
+            errors.append("%s: shared is required, true or false (can other people read this workspace?)" % where)
 
         conn = item.get("connector")
         if conn is not None and (not isinstance(conn, str) or not CONNECTOR_RE.fullmatch(conn)):
-            errors.append("%s: connector must be null or a tool name prefix (letters, digits, _ . -)" % where)
+            errors.append("%s: connector must be null or a full tool name prefix such as mcp__notion__" % where)
 
         src = item.get("data_source")
         if not isinstance(src, str) or not DATA_SOURCE_RE.fullmatch(src):
@@ -201,17 +210,30 @@ def validate(cfg):
 
     # Names and keywords share one namespace: a word that picks one list must
     # not equal, or appear as a whole word inside, a word of another list.
-    for a, list_a, where_a, what_a in words:
-        for b, list_b, where_b, what_b in words:
+    # Lists and keywords are capped above, so this stays small.
+    patterns = [(w, _word_pattern(w), n, wh, what) for w, n, wh, what in words]
+    for a, pat_a, list_a, where_a, what_a in patterns:
+        for b, pat_b, list_b, where_b, what_b in patterns:
             if list_a >= list_b:
                 continue
-            if a == b or _contains_word(a, b) or _contains_word(b, a):
+            if a == b or pat_a.search(b) or pat_b.search(a):
                 errors.append("%s: %s overlaps %s of %s" % (where_b, what_b, what_a, where_a))
+    if len(errors) > MAX_ERRORS:
+        errors = errors[:MAX_ERRORS] + ["... and %d more problems" % (len(errors) - MAX_ERRORS)]
     return errors
 
 
-def _contains_word(needle, haystack):
-    return re.search(r"(?<!\w)" + re.escape(needle) + r"(?!\w)", haystack) is not None
+def _word_pattern(word):
+    return re.compile(r"(?<!\w)" + re.escape(word) + r"(?!\w)")
+
+
+def _no_duplicate_keys(pairs):
+    obj = {}
+    for key, value in pairs:
+        if key in obj:
+            raise ValueError("duplicate key %r" % key)
+        obj[key] = value
+    return obj
 
 
 def load(path):
@@ -223,18 +245,27 @@ def load(path):
         return None, "no config at %s: run the setup in references/setup.md" % path
     except OSError as exc:
         return None, "cannot open %s: %s" % (path, exc.strerror or exc)
-    with os.fdopen(fd, "rb") as handle:
+    try:
+        # Check the raw descriptor first: a directory or device never reaches fdopen.
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            os.close(fd)
+            return None, "not a regular file: %s" % path
+        handle = os.fdopen(fd, "rb")
+    except OSError as exc:
         try:
-            info = os.fstat(handle.fileno())
-            if not stat.S_ISREG(info.st_mode):
-                return None, "not a regular file: %s" % path
+            os.close(fd)
+        except OSError:
+            pass
+        return None, "cannot read %s: %s" % (path, exc.strerror or exc)
+    with handle:
+        try:
             data = handle.read(MAX_BYTES + 1)
         except OSError as exc:
             return None, "cannot read %s: %s" % (path, exc.strerror or exc)
     if len(data) > MAX_BYTES:
         return None, "config is larger than %d bytes: %s" % (MAX_BYTES, path)
     try:
-        return json.loads(data.decode("utf-8")), None
+        return json.loads(data.decode("utf-8"), object_pairs_hook=_no_duplicate_keys), None
     except (UnicodeDecodeError, ValueError, RecursionError) as exc:
         return None, "cannot read %s: %s" % (path, str(exc)[:200])
 

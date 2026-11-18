@@ -14,7 +14,7 @@ claude mcp add --transport http notion https://mcp.notion.com/mcp
 
 then `/mcp` in Claude Code to sign in. Never ask for a Notion token or password in chat.
 
-If tools from more than one Notion connector are present (for example a personal and a work account), ask which one serves each list and note its tool name prefix (the part before `notion-fetch`) as that list's `connector`.
+If tools from more than one Notion connector are present (for example a personal and a work account), ask which one serves each list and note its full tool name prefix, up to and including the double underscore before `notion-fetch` (for example `mcp__notion-work__`), as that list's `connector`.
 
 ## 2. Interview
 
@@ -56,7 +56,7 @@ Then map it as in 3a.
 
 ## 4. Write the config
 
-Path: `$NOTION_TODO_CONFIG` if set, otherwise `~/.claude/notion-todo/lists.json`. Before writing, check that the path is not a symbolic link (for example `test -L "$path"`); if it is, stop and tell the user. Create the folder if it does not exist. Show the content first, write it after a yes, then run:
+Path: `$NOTION_TODO_CONFIG` if set, otherwise `~/.claude/notion-todo/lists.json`. Before writing, check that neither the file nor its folder is a symbolic link (for example `test -L "$path"` and `test -L "$(dirname "$path")"`); if one is, stop and tell the user. Create the folder if it does not exist. Show the full path and the content first (say so if the path is not the default one), write it after a yes, then run:
 
 ```bash
 python3 <this skill folder>/scripts/notion_todo_config.py check

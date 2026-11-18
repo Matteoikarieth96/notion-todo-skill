@@ -95,12 +95,12 @@ class ValidateTests(unittest.TestCase):
 
     def test_database_url_must_be_notion_https(self):
         for bad in ("http://www.notion.so/x", "https://evil.example/notion.so",
-                    "https://notion.so.evil.example/x", "javascript:alert(1)", 3):
+                    "https://notion.so.evil.example/x", "javascript:alert(1)", 3,
+                    "https://team.notion.site/abc"):
             cfg = example()
             cfg["lists"][0]["database_url"] = bad
             self.assertProblem(cfg, "database_url")
-        for good in ("https://www.notion.so/abc", "https://app.notion.com/p/abc",
-                     "https://team.notion.site/abc"):
+        for good in ("https://www.notion.so/abc", "https://app.notion.com/p/abc"):
             cfg = example()
             cfg["lists"][0]["database_url"] = good
             self.assertEqual(nc.validate(cfg), [])
@@ -283,12 +283,79 @@ class ReviewRegressionTests(unittest.TestCase):
     def test_shared_and_connector(self):
         cfg = example()
         cfg["lists"][0]["shared"] = "yes"
-        self.assertProblem(cfg, "shared must be true or false")
+        self.assertProblem(cfg, "shared is required")
         cfg = example()
         cfg["lists"][0]["connector"] = "mcp__notion__"
         self.assertEqual(nc.validate(cfg), [])
         cfg["lists"][0]["connector"] = "mcp notion; rm"
         self.assertProblem(cfg, "connector must be")
+
+    def test_connector_must_be_a_full_prefix(self):
+        # A partial prefix such as "mcp__notion" would also match "mcp__notion-work__".
+        for bad in ("m", "mcp", "mcp__notion", "mcp__notion_work", "notion__", "mcp____"):
+            cfg = example()
+            cfg["lists"][0]["connector"] = bad
+            self.assertProblem(cfg, "connector must be")
+        for good in ("mcp__notion-work__", "mcp__96e76b41-a3bb__"):
+            cfg = example()
+            cfg["lists"][0]["connector"] = good
+            self.assertEqual(nc.validate(cfg), [])
+
+    def test_overlap_uses_casefold(self):
+        cfg = example()
+        cfg["lists"][0]["keywords"] = ["stra" + chr(0xDF) + "e"]
+        cfg["lists"][1]["keywords"] = ["STRASSE"]
+        self.assertProblem(cfg, "overlaps")
+
+    def test_shared_is_required(self):
+        cfg = example()
+        del cfg["lists"][0]["shared"]
+        self.assertProblem(cfg, "shared is required")
+
+    def test_version_true_is_not_1(self):
+        cfg = example()
+        cfg["version"] = True
+        self.assertProblem(cfg, "version must be 1")
+
+    def test_keyword_and_list_caps(self):
+        cfg = example()
+        cfg["lists"][0]["keywords"] = ["k%d" % i for i in range(nc.MAX_KEYWORDS + 1)]
+        self.assertProblem(cfg, "at most %d keywords" % nc.MAX_KEYWORDS)
+        cfg = example()
+        cfg["lists"] = [copy.deepcopy(cfg["lists"][0]) for _ in range(nc.MAX_LISTS + 1)]
+        self.assertProblem(cfg, "at most %d lists" % nc.MAX_LISTS)
+
+    def test_huge_keyword_lists_are_fast_and_errors_capped(self):
+        import time
+        cfg = example()
+        cfg["lists"][0]["keywords"] = ["a"] * 13000
+        cfg["lists"][1]["keywords"] = ["a"] * 13000
+        start = time.time()
+        problems = nc.validate(cfg)
+        self.assertLess(time.time() - start, 2)
+        self.assertLessEqual(len(problems), nc.MAX_ERRORS + 1)
+        cfg = example()
+        cfg["lists"][0]["keywords"] = ["w"] * nc.MAX_KEYWORDS
+        cfg["lists"][1]["keywords"] = ["w"] * nc.MAX_KEYWORDS
+        problems = nc.validate(cfg)
+        self.assertEqual(len(problems), nc.MAX_ERRORS + 1)
+        self.assertIn("more problems", problems[-1])
+
+    def test_duplicate_json_keys_rejected(self):
+        path = os.path.join(self.tmp.name, "dup.json")
+        with open(path, "w") as handle:
+            handle.write('{"version": 1, "version": 1, "lists": []}')
+        cfg, error = nc.load(path)
+        self.assertIsNone(cfg)
+        self.assertIn("duplicate key", error)
+
+    def test_directory_is_refused_without_traceback(self):
+        path = os.path.join(self.tmp.name, "dir.json")
+        os.mkdir(path)
+        code, out = run(["check", "--config", path])
+        self.assertEqual(code, 2)
+        self.assertIn("ERROR", out)
+        self.assertNotIn("Traceback", out)
 
     def test_clean_masks_separators_and_format_chars(self):
         for code in (0x2028, 0x2029, 0x2060, 0xFEFF, 0x061C, 0x202E, 0x9B, 0x1B):
