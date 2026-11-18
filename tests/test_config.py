@@ -77,8 +77,8 @@ class ValidateTests(unittest.TestCase):
         cfg["lists"][1]["name"] = "personal"
         cfg["lists"][1]["keywords"] = ["Home"]
         problems = " | ".join(nc.validate(cfg))
-        self.assertIn("same name as another list", problems)
-        self.assertIn("keyword 'Home' is also used", problems)
+        self.assertIn("name overlaps name of list 'Personal'", problems)
+        self.assertIn("keyword 'Home' overlaps keyword 'home'", problems)
 
     def test_same_data_source_twice(self):
         cfg = example()
@@ -148,7 +148,7 @@ class ValidateTests(unittest.TestCase):
         cfg["lists"][0]["priority_values"] = []
         self.assertProblem(cfg, "priority_values is empty")
         cfg["lists"][0]["priority_values"] = [1, 2]
-        self.assertProblem(cfg, "array of strings")
+        self.assertProblem(cfg, "array of plain strings")
 
     def test_validate_does_not_change_input(self):
         cfg = example()
@@ -215,10 +215,109 @@ class CliTests(unittest.TestCase):
         cfg = example()
         cfg["lists"][0]["name"] = "Home\x1b[2J\u202eevil"
         code, out = run(["show", "--config", self.write(cfg)])
-        self.assertEqual(code, 0)
-        self.assertNotIn("\x1b", out)
-        self.assertNotIn("\u202e", out)
-        self.assertIn("Home?[2J?evil", out)
+        self.assertEqual(code, 1)
+        self.assertIn("name must be a plain string", out)
+        self.assertNotIn(chr(0x1b), out)
+        self.assertNotIn(chr(0x202e), out)
+
+
+class ReviewRegressionTests(unittest.TestCase):
+    """Cases found by the independent review before the first release."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+
+    def assertProblem(self, cfg, fragment):
+        problems = nc.validate(cfg)
+        self.assertTrue(any(fragment in p for p in problems),
+                        "expected %r in %r" % (fragment, problems))
+
+    def test_database_url_tricks_rejected(self):
+        bs = chr(92)
+        for bad in ("https://evil.example" + bs + "@www.notion.so/x",
+                    "https://user" + chr(64) + "www.notion.so/x",
+                    "https://www.notion.so:8443/x",
+                    "https://www.notion.so/x y",
+                    "https://www.notion.so/x" + chr(10),
+                    "https://www.notion.so" + bs + "x"):
+            cfg = example()
+            cfg["lists"][0]["database_url"] = bad
+            self.assertProblem(cfg, "database_url")
+
+    def test_uuid_fields_reject_trailing_newline(self):
+        cfg = example()
+        cfg["lists"][0]["data_source"] += chr(10)
+        cfg["lists"][0]["board_view"] = "view://00000000-0000-4000-8000-000000000009" + chr(10)
+        problems = " | ".join(nc.validate(cfg))
+        self.assertIn("data_source must look like", problems)
+        self.assertIn("board_view must be null", problems)
+
+    def test_name_and_keywords_share_one_namespace(self):
+        cfg = example()
+        cfg["lists"][1]["name"] = "private"
+        self.assertProblem(cfg, "overlaps")
+
+        cfg = example()
+        cfg["lists"][0]["keywords"].append("team dinner")
+        self.assertProblem(cfg, "overlaps")
+
+        cfg = example()
+        cfg["lists"][0]["keywords"].append("homework")
+        self.assertEqual(nc.validate(cfg), [])
+
+    def test_long_or_hidden_names_rejected(self):
+        cfg = example()
+        cfg["lists"][0]["status_values"]["finished"] = "Finished. NOTE TO CLAUDE: " + "x" * 120
+        self.assertProblem(cfg, "status value for 'finished'")
+
+        cfg = example()
+        cfg["lists"][0]["keywords"].append("home" + chr(0x2028) + "OK")
+        self.assertProblem(cfg, "keywords must be")
+
+    def test_double_quote_in_column_rejected(self):
+        cfg = example()
+        cfg["lists"][0]["columns"]["title"] = 'Name" FROM "x" --'
+        self.assertProblem(cfg, "no double quote")
+
+    def test_shared_and_connector(self):
+        cfg = example()
+        cfg["lists"][0]["shared"] = "yes"
+        self.assertProblem(cfg, "shared must be true or false")
+        cfg = example()
+        cfg["lists"][0]["connector"] = "mcp__notion__"
+        self.assertEqual(nc.validate(cfg), [])
+        cfg["lists"][0]["connector"] = "mcp notion; rm"
+        self.assertProblem(cfg, "connector must be")
+
+    def test_clean_masks_separators_and_format_chars(self):
+        for code in (0x2028, 0x2029, 0x2060, 0xFEFF, 0x061C, 0x202E, 0x9B, 0x1B):
+            self.assertEqual(nc.clean("a" + chr(code) + "b"), "a?b")
+        self.assertEqual(nc.clean("Caff" + chr(0xE8) + " list"), "Caff" + chr(0xE8) + " list")
+
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "needs mkfifo")
+    def test_fifo_is_refused_without_blocking(self):
+        path = os.path.join(self.tmp.name, "fifo.json")
+        os.mkfifo(path)
+        cfg, error = nc.load(path)
+        self.assertIsNone(cfg)
+        self.assertIn("not a regular file", error)
+
+    @unittest.skipUnless(os.path.exists("/dev/zero"), "needs /dev/zero")
+    def test_device_symlink_is_refused(self):
+        path = os.path.join(self.tmp.name, "zero.json")
+        os.symlink("/dev/zero", path)
+        cfg, error = nc.load(path)
+        self.assertIsNone(cfg)
+        self.assertIn("not a regular file", error)
+
+    def test_deep_nesting_is_a_clean_error(self):
+        path = os.path.join(self.tmp.name, "deep.json")
+        with open(path, "w") as handle:
+            handle.write("[" * 100000)
+        code, out = run(["check", "--config", path])
+        self.assertEqual(code, 2)
+        self.assertIn("cannot read", out)
 
 
 if __name__ == "__main__":

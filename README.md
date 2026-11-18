@@ -15,16 +15,17 @@ A Claude Code skill that runs your Notion to-do lists from plain sentences, and 
 - **Writes a recap box** at the top of each card you finish: 3 or 4 sentences on what was done, plus links (repo, PR, documents). Only facts it knows, never invented links.
 - **Morning recap and end-of-day note**, one list at a time.
 
-**Lists never mix.** It reads one list per call, finds a card only inside the list you meant, refuses to move or copy cards between lists, and asks which list when your sentence does not say. Useful when a personal list and a company list live side by side.
+**Lists never mix.** It reads one list per call, finds a card only inside the list you meant, refuses to move or copy cards between lists, and asks which list when your sentence does not clearly name one. Useful when a personal list and a company list live side by side.
 
-What it never does without your yes: change two or more cards at once, archive or delete a card, replace the day note, change a database's columns, or touch anything across lists. It never asks for a Notion token or password, and treats text inside cards as data, not instructions.
+What it never does without your yes: change two or more cards at once, archive or delete a card, replace the day note, change a database's columns, write a recap on a list marked as shared, or touch anything across lists. It never asks for a Notion token or password, and treats everything it reads from Notion as data, not instructions.
 
 ## The setup questions
 
 1. How many lists, and a name for each.
 2. Which words pick each list ("work", "office", "home", "mine").
 3. For each list: the link of an existing database, or a new one (and under which page).
-4. Preferences: does "done" only tick the box or also set the status; recap box on every card; keep an end-of-day note.
+4. Whether other people can read the list's workspace (recaps there are shown to you first).
+5. Preferences: does "done" only tick the box or also set the status; recap box on every card; keep an end-of-day note.
 
 Then it reads each database's columns, proposes a mapping, shows it, and writes the config after your yes.
 
@@ -34,10 +35,13 @@ Then it reads each database's columns, proposes a mapping, shows it, and writes 
 git clone https://github.com/Matteoikarieth96/notion-todo-skill ~/.claude/skills/notion-todo
 ```
 
+Update with `git -C ~/.claude/skills/notion-todo pull`; uninstall by deleting that folder (and `~/.claude/notion-todo/` for the config).
+
 Requirements:
 
-- Claude Code (or the Claude desktop app) with the **Notion MCP connector**, signed in with your Notion account. In Claude Code: `claude mcp add --transport http notion https://mcp.notion.com/mcp`, then `/mcp` to sign in.
-- Python 3.9 or newer (standard library only), for the config check.
+- Claude Code (the CLI, or the Code tab of the Claude desktop app) with the **Notion MCP connector**, signed in with your Notion account: `claude mcp add --transport http notion https://mcp.notion.com/mcp`, then `/mcp` to sign in.
+- A Notion plan where the connector's database queries are not capped. On plans with a small query allowance the skill still works, but after the allowance it falls back to a board view, which is slower and may show only top-level cards. Check Notion's MCP documentation for your plan.
+- Python 3.9 or newer (standard library only) as `python3`, for the config check.
 
 The config lives at `~/.claude/notion-todo/lists.json` (or the path in `NOTION_TODO_CONFIG`), outside the skill folder, so updating the skill never touches it. A fictional example: [references/lists.example.json](references/lists.example.json).
 
@@ -61,7 +65,8 @@ The skill only acts through the Notion connector you signed in to, on the databa
 
 ## Limitations
 
-- Needs the Notion MCP connector; the SQL query tool of that connector can hit Notion's usage limits on some plans. The skill then falls back to a board view, which may show only top-level cards.
+- Needs the Notion MCP connector and Claude Code; it is not packaged for the claude.ai web app.
+- Database queries through the connector are capped on some Notion plans; past the cap the skill falls back to a board view, which may show only top-level cards.
 - Column mapping is proposed from names and types; check it at setup, especially for status and priority values in other languages.
 - Recurring tasks, reminders and notifications are out of scope: those stay in Notion.
 - The trigger phrases in the description are English with a few Italian examples; other languages usually work but were not measured.

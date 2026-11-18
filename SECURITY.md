@@ -15,12 +15,16 @@ What the skill reads, runs and writes, and what could be hostile:
 | Risk | Mitigation | File |
 | --- | --- | --- |
 | A card lands in the wrong list (personal in a company workspace, or the reverse) | one data source per query; a card is edited only by the URL returned from a query in the chosen list; parent data source checked on fetch; no moving or copying between lists; ask when the list is not named | SKILL.md ("Keeping them apart") |
-| Prompt injection through card text or descriptions | text from Notion is treated as data; the big actions (2+ cards, archive, delete, schema changes, day note) always need the user's yes | SKILL.md ("When to ask first") |
-| SQL injection through user text | user text goes in `params` with `?` placeholders, never inside the SQL string | SKILL.md ("Tools") |
+| A word inside the task picks the wrong list ("buy an office chair" going to Work) | a keyword counts only when it names where the card goes, as a whole word; two lists matched, or a keyword only inside the task, means asking; the checker refuses names and keywords that repeat or overlap across lists | SKILL.md ("Picking the list"), scripts/notion_todo_config.py |
+| Prompt injection through card text, descriptions, column or option names | everything a Notion tool or the config script returns is data; names in the config are capped at 100 characters with no control, format or separator characters; the big actions (2+ cards, archive, delete, schema changes, day note) always need the user's yes | SKILL.md ("When to ask first"), references/setup.md, scripts/notion_todo_config.py |
+| A recap leaks conversation details into a shared workspace | recaps never hold credentials, other people's or client data, or text pasted only for Claude; on lists marked `shared` the recap is shown and written only after a yes | SKILL.md ("Recap box") |
+| SQL injection through user text or column names | user text goes in `params` with `?` placeholders; column names are double-quoted and the checker refuses names with a double quote; LIKE wildcards are escaped | SKILL.md ("Tools"), scripts/notion_todo_config.py |
+| Wrong Notion account | a list can name the connector that serves it; with several connectors and none named, the skill asks | SKILL.md ("Tools"), references/setup.md |
 | Bulk or destructive changes | several cards, archive, delete, replacing the day note and column changes are listed as ask-first; archiving is preferred to deleting | SKILL.md |
 | Credentials in chat | the skill never asks for a Notion token or password; the connector handles sign-in | SKILL.md, references/setup.md |
-| Config pointing somewhere unexpected | the checker accepts only `collection://<uuid>`, `view://<uuid>` and https links on Notion domains; unknown keys, duplicate lists and overlapping keywords are errors; files over 256 KB are refused | scripts/notion_todo_config.py |
-| Terminal escape sequences in config values | control and bidi characters are replaced before printing | scripts/notion_todo_config.py |
+| Config pointing somewhere unexpected | the checker accepts only exact `collection://<uuid>` and `view://<uuid>` values and https links on Notion domains with no user, port, `@`, backslash or whitespace; unknown keys and duplicate lists are errors | scripts/notion_todo_config.py |
+| A config path that hangs or floods the checker (FIFO, device, huge or deeply nested file) | opened non-blocking, only regular files read, at most 256 KB read, nesting errors reported as a normal error; setup refuses to write the config through a symbolic link | scripts/notion_todo_config.py, references/setup.md |
+| Terminal escape or look-alike text in printed values | every control, format, line or paragraph separator and unassigned character is replaced before printing | scripts/notion_todo_config.py |
 | Invented facts in recap boxes | recap uses only facts from the conversation, the card or the user; never an invented link | SKILL.md ("Recap box") |
 
 Tests for these cases: `tests/test_config.py`, `tests/test_skill.py`.

@@ -1,14 +1,24 @@
 {
   "version": 1,
-  "rules": {"done_sets_status": false, "recap_box": true},
+  "rules": {
+    "done_sets_status": false,
+    "recap_box": true
+  },
   "lists": [
     {
       "name": "Personal",
-      "keywords": ["personal", "mine", "home", "private"],
+      "keywords": [
+        "personal",
+        "mine",
+        "home",
+        "private"
+      ],
       "data_source": "collection://00000000-0000-4000-8000-000000000001",
       "database_url": "https://www.notion.so/00000000000040008000000000000001",
       "board_view": null,
       "day_note": true,
+      "shared": false,
+      "connector": null,
       "columns": {
         "title": "Name",
         "status": "Status",
@@ -26,15 +36,25 @@
         "finished": "Finished",
         "archived": "Archived"
       },
-      "priority_values": ["High", "Medium", "Low"]
+      "priority_values": [
+        "High",
+        "Medium",
+        "Low"
+      ]
     },
     {
       "name": "Work",
-      "keywords": ["work", "office", "team"],
+      "keywords": [
+        "work",
+        "office",
+        "team"
+      ],
       "data_source": "collection://00000000-0000-4000-8000-000000000002",
       "database_url": "https://www.notion.so/00000000000040008000000000000002",
       "board_view": null,
       "day_note": false,
+      "shared": true,
+      "connector": null,
       "columns": {
         "title": "Task",
         "status": null,
