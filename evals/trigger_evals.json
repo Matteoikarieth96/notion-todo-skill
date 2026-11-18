@@ -1,0 +1,18 @@
+[
+  {"query": "open my to do list", "should_trigger": true},
+  {"query": "what do I still have to do on the work list?", "should_trigger": true},
+  {"query": "add to my personal to do: book the car service, high priority", "should_trigger": true},
+  {"query": "remind me to call the plumber on Thursday", "should_trigger": true},
+  {"query": "I finished the quarterly report, mark it done", "should_trigger": true},
+  {"query": "put the website redesign in progress and add a subtask: collect logos", "should_trigger": true},
+  {"query": "where do we start today?", "should_trigger": true},
+  {"query": "chiudiamo la giornata e scrivi la nota per domani sulla to do", "should_trigger": true},
+  {"query": "search my Notion CRM for contacts at a bank", "should_trigger": false},
+  {"query": "summarise the meeting notes page in Notion from yesterday", "should_trigger": false},
+  {"query": "put a call with the accountant in my calendar on Friday at 10", "should_trigger": false},
+  {"query": "make a checklist in this chat for packing for a trip", "should_trigger": false},
+  {"query": "find all the TODO comments in this repository", "should_trigger": false},
+  {"query": "create a Notion database for my book collection", "should_trigger": false},
+  {"query": "how long will this task take you?", "should_trigger": false},
+  {"query": "write a slide deck about our product roadmap", "should_trigger": false}
+]

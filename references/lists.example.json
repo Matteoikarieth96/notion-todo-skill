@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "rules": {"done_sets_status": false, "recap_box": true},
+  "lists": [
+    {
+      "name": "Personal",
+      "keywords": ["personal", "mine", "home", "private"],
+      "data_source": "collection://00000000-0000-4000-8000-000000000001",
+      "database_url": "https://www.notion.so/00000000000040008000000000000001",
+      "board_view": null,
+      "day_note": true,
+      "columns": {
+        "title": "Name",
+        "status": "Status",
+        "priority": "Priority",
+        "due": "Due",
+        "done": "Done",
+        "parent": "Parent",
+        "subtasks": "Subtasks"
+      },
+      "status_values": {
+        "not_started": "Not started",
+        "in_progress": "In progress",
+        "waiting": "Waiting",
+        "backlog": "Backlog",
+        "finished": "Finished",
+        "archived": "Archived"
+      },
+      "priority_values": ["High", "Medium", "Low"]
+    },
+    {
+      "name": "Work",
+      "keywords": ["work", "office", "team"],
+      "data_source": "collection://00000000-0000-4000-8000-000000000002",
+      "database_url": "https://www.notion.so/00000000000040008000000000000002",
+      "board_view": null,
+      "day_note": false,
+      "columns": {
+        "title": "Task",
+        "status": null,
+        "priority": null,
+        "due": "Deadline",
+        "done": "Completed",
+        "parent": null,
+        "subtasks": null
+      },
+      "status_values": {},
+      "priority_values": []
+    }
+  ]
+}
